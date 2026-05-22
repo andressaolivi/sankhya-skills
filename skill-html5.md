@@ -1,288 +1,574 @@
 ---
-name: sankhya-html5
-description: Desenvolvimento de dashboards, gadgets e telas HTML5 no Sankhya ERP — geração de JSP+XML, snk:query com bindings EL/JDBC, parâmetros de prompt, multi-tabs, links entre gadgets e gotchas validados em produção (ORA-00920, datas, multiList, encoding em CDATA).
+name: sankhya-dashboard-html5
+description: >
+  Conhecimento completo sobre como criar dashboards HTML5 (gadgets) no ERP Sankhya.
+  Cobre a estrutura do XML de configuracao, criacao de JSPs com snk:query, prompt-parameters,
+  empacotamento em ZIP, deploy via Upload Pacote HTML, taglibs disponiveis, API JavaScript nativa
+  (executeQuery, openLevel, refreshDetails, openApp, openPage), parametros entity/singleList/multiList,
+  drill-down via modal+executeQuery, export CSV client-side, XMLTABLE para parsing de XML de notas,
+  e todas as armadilhas e workarounds descobertos na pratica (ORA-00920, datas, multiList, encoding,
+  Internal Server Error em Level 2, openLevel que nao passa parametros).
+  Use esta skill SEMPRE que o usuario pedir para criar, modificar ou debugar um gadget HTML5 no Sankhya,
+  ou mencionar: dashboard Sankhya, gadget HTML5, snk:query, componente HTML5, tdb_dashboard.xml,
+  Upload Pacote HTML, openLevel, refreshDetails, executeQuery, prompt-parameters, ou qualquer referencia
+  a criacao de telas customizadas dentro do Sankhya via JSP/HTML5.
+  Tambem use quando o usuario mencionar erros como "Internal Server Error" em gadgets,
+  "setObject em PreparedStatement", "param -> null", ou problemas com datas em queries Sankhya.
 ---
 
-# 🎨 sankhya-html5
+# Sankhya Dashboard HTML5 - Guia Completo
 
-> Skill para construir e debugar dashboards HTML5, gadgets e relatórios no Sankhya — incluindo o formato JSP+XML, parâmetros de prompt, integração com `snk:query` e os gotchas que mais quebram projetos em produção.
+Skill para criar dashboards (gadgets) HTML5 customizados no ERP Sankhya.
+Baseado em experiencia real de desenvolvimento e debugging iterativo.
 
-**Versão:** 1.0.0
-**Última atualização:** 2026-05-19
-**Autora:** Andressa Olivi — [Olivi Consultoria](https://github.com/andressaolivi)
+> **IMPORTANTE:** Leia este arquivo inteiro antes de escrever qualquer codigo.
+> As armadilhas documentadas aqui foram descobertas com horas de debugging.
 
----
-
-## 🎯 Quando usar esta skill
-
-- Pergunta envolve **gadget HTML5**, **dashboard HTML5**, **JSP + XML**, `snk:query`, `snk:command`
-- Usuário quer **criar/editar/debugar uma tela HTML5** no Sankhya
-- Pergunta menciona **parâmetro de prompt** (`<prompt-parameter>`), **prompt-bind**, **type=date/text/integer/multiList**
-- Erros típicos: `ORA-00920`, parâmetro de data não filtra, `multiList` não recebe valores, prompt não aparece
-- Palavras-chave: `gadget`, `html5`, `dashboard`, `snk:query`, `prompt-parameter`, `bind`, `JSP`, `XML gadget`, `GadgetCustomizado`
-
-## 🚫 Quando NÃO usar
-
-- Para **estrutura de tabela do Sankhya** (campos, tipos, joins) → usar `sankhya-dicionario`
-- Para **fluxos de negócio** (faturamento, baixa financeira, custo médio) → usar `sankhya-funcionamento`
-- Para **telas customizadas via `metadata.xml`** (Construtor de Telas) → usar `sankhya-construtor-telas`
-- Para **customizações Java** (Acao, JdbcWrapper, módulos Java) → usar `sankhya-api-java`
-- Para **dúvidas sobre como usar uma funcionalidade do Sankhya pelo usuário final** → usar `sankhya-ajuda-online`
+**Versao:** 2.0.0
+**Ultima atualizacao:** 2026-05-22
 
 ---
 
-## 📚 Capacidades
+## 1. Estrutura de Arquivos
 
-- Gerar **estrutura completa de gadget HTML5** (JSP + XML) pronta pra upload
-- Escrever **`snk:query`** com bindings corretos (EL vs JDBC) para cada tipo de parâmetro
-- Definir **`<prompt-parameter>`** com os tipos corretos (lowercase, com regras específicas para `date` e `multiList`)
-- Montar **dashboards multi-tab** com links entre gadgets e drill-down
-- Diagnosticar e corrigir **ORA-00920** quando o erro vem de operadores HTML-encoded dentro de CDATA
-- Linkar documentos via `TGFIXN/DOCSREF` em gadgets que cruzam notas/operações
-- Empacotar gadget para import em **Configurações → Gadgets → Importar**
-
-## 📂 Arquivos de referência
+Um gadget HTML5 no Sankhya consiste em:
 
 ```
-sankhya-html5/
-├── SKILL.md                          ← este arquivo
-└── references/
-    ├── gadget_estrutura.md           ← Layout JSP+XML, taglib, IDs, namespaces
-    ├── snk_query.md                  ← snk:query, bindings, CDATA, encoding
-    ├── prompt_parameters.md          ← Tipos, defaults, regras por tipo
-    ├── multi_tab_dashboard.md        ← Tabs, links entre gadgets, drill-down
-    ├── gotchas.md                    ← ORA-00920, datas, multiList, encoding
-    └── indice.md                     ← Mapa de navegação
+meu_gadget/
+├── tdb_dashboard.xml    (configuracao do gadget: levels, parametros)
+├── tdb_partida.jsp      (JSP principal - ponto de entrada)
+└── (outros .jsp, .js, .css conforme necessario)
 ```
 
-| Reference | Carregar quando |
-|---|---|
-| `gadget_estrutura.md` | Pergunta menciona "criar gadget", "como começar", "estrutura JSP" |
-| `snk_query.md` | Pergunta envolve `snk:query`, bind, parâmetros em SQL, CDATA |
-| `prompt_parameters.md` | Pergunta envolve `<prompt-parameter>`, tipos, prompt no início do gadget |
-| `multi_tab_dashboard.md` | Pergunta envolve abas, dashboards complexos, navegação entre gadgets |
-| `gotchas.md` | Erro `ORA-00920`, parâmetro não filtra, comportamento inesperado |
-| `indice.md` | Quando não souber em qual reference está o tema |
+### Regras de empacotamento ZIP
+
+- Os arquivos devem estar **na raiz do ZIP**, sem pasta intermediaria
+- Correto: `zip gadget.zip tdb_partida.jsp tdb_dashboard.xml`
+- ERRADO: `zip gadget.zip minha_pasta/tdb_partida.jsp` (cria subpasta)
+- O "Ponto de Entrada" configurado no Sankhya deve ser o **nome exato do JSP principal**
 
 ---
 
-## 🧭 Workflow típico
+## 2. XML de Configuracao (tdb_dashboard.xml)
 
-1. **Identificar o tipo de gadget** — relatório simples, dashboard multi-tab, lista com drill-down, gráfico
-2. **Definir parâmetros de prompt** ANTES de escrever o SQL — tipos, defaults, obrigatoriedade
-3. **Escrever a `snk:query`** seguindo as regras de binding (ver "Regras críticas")
-4. **Embrulhar no JSP+XML** com o `<gadget>` raiz e os namespaces corretos
-5. **Validar localmente** — fazer o XML passar por um parser antes de subir
-6. **Importar** via **Configurações → Gadgets → Importar** (ou a tela equivalente no MGE Web)
-7. **Testar com cada combinação de parâmetros** — datas em borda, listas vazias, multiList com 0/1/N seleções
+### Estrutura basica
 
----
-
-## ⚠️ Regras críticas (gotchas)
-
-### Regra 1 — Datas em `snk:query` exigem EL, não JDBC binding
-
-**Contexto:** Quando você tem um `<prompt-parameter name="P_DATA" type="date"/>` e quer usá-lo num WHERE.
-
-**Regra:** Nunca use `:P_DATA` (JDBC binding) para parâmetros de data dentro do `snk:query`. Sempre use EL syntax com `TO_DATE`:
-
-**Por quê:** O `java.util.Date.toString()` que o framework usa renderiza como `'YYYY-MM-DD HH:MM:SS.S'` (com horário e milissegundos). O Oracle não consegue fazer cast implícito disso para `DATE` quando vem como bind JDBC, gerando erros silenciosos ou filtros que não filtram nada.
-
-**Exemplo ruim:**
-```sql
-WHERE T.DTNEG BETWEEN :P_DT_INI AND :P_DT_FIM
--- Falha silenciosa: retorna vazio ou filtros não aplicam
-```
-
-**Exemplo bom:**
-```sql
-WHERE T.DTNEG BETWEEN
-    TO_DATE(SUBSTR('${P_DT_INI}', 1, 10), 'YYYY-MM-DD')
-AND TO_DATE(SUBSTR('${P_DT_FIM}', 1, 10), 'YYYY-MM-DD')
-```
-
-O `SUBSTR(..., 1, 10)` corta o horário, deixando só `YYYY-MM-DD`.
-
----
-
-### Regra 2 — Tipos de `prompt-parameter` SEMPRE em lowercase
-
-**Contexto:** Definição do atributo `type` no `<prompt-parameter>`.
-
-**Regra:** O framework é case-sensitive. Use `date`, `text`, `integer`, `multiList` — nunca `Date`, `Text`, `Integer`.
-
-**Por quê:** Parser do gadget não reconhece o tipo capitalizado, e o resultado é o prompt aparecer como campo texto livre (ou pior, não aparecer).
-
-**Exemplo ruim:**
 ```xml
-<prompt-parameter name="P_DATA" type="Date" label="Data" />
+<?xml version="1.0" encoding="UTF-8"?>
+<gadget>
+    <prompt-parameters>
+        <!-- Parametros que o usuario preenche antes de abrir o gadget -->
+    </prompt-parameters>
+    <level id="lvl_principal" description="Meu Dashboard">
+        <container orientacao="V" tamanhoRelativo="100">
+            <container orientacao="V" tamanhoRelativo="100">
+                <html5component id="html5_principal" entryPoint="tdb_partida.jsp"/>
+            </container>
+        </container>
+    </level>
+</gadget>
 ```
 
-**Exemplo bom:**
+### Prompt Parameters - Tipos e Exemplos
+
+#### Data
 ```xml
-<prompt-parameter name="P_DATA" type="date" label="Data" />
+<parameter id="P_DTINI" description="Data inicial" metadata="date"
+           required="true" keep-last="true" keep-date="false"
+           show-inactives="false" label="P_DTINI : Data" order="1"/>
 ```
+- `metadata` DEVE ser **minusculo**: `"date"` (nao `"Date"`)
+- **NAO usar `<expression>` com default** em parametros de data
+- O Sankhya envia como `java.util.Date`, EL `${P_DTINI}` renderiza `"2025-10-01 00:00:00.0"`
+
+#### MultiList (selecao multipla com SQL)
+```xml
+<parameter id="P_CODEMP" description="Empresa" metadata="multiList:Text"
+           listType="sql" required="true" keep-last="true" keep-date="false"
+           show-inactives="false" label="P_CODEMP : multiList:Text" order="0">
+    <expression type="SQL"><![CDATA[
+        SELECT CODEMP AS VALUE, NOMEFANTASIA AS LABEL FROM TSIEMP ORDER BY CODEMP
+    ]]></expression>
+</parameter>
+```
+- Usar `multiList:Text` (nao `multiList:Integer`)
+- Binding `:P_CODEMP` funciona no `snk:query` → `AND CODEMP IN (:P_CODEMP)`
+- Quando nenhum item e desselecionado, TODOS os valores sao enviados
+
+#### SingleList (dropdown com valores estaticos)
+```xml
+<parameter id="P_SOVENDA" description="Somente Venda?" metadata="singleList:Text"
+           listType="text" required="true" keep-last="true" keep-date="false"
+           show-inactives="false" label="P_SOVENDA : singleList:Text" order="4">
+    <item value="S" label="Sim"/>
+    <item value="N" label="Nao"/>
+</parameter>
+```
+- Usar `metadata="singleList:Text"` com `listType="text"`
+- Opcoes via `<item value="X" label="Descricao"/>` (nao SQL UNION)
+- Retorna `""` quando nao ha opcoes, `"0"` quando ha opcoes mas nenhuma selecionada
+- No SQL: `AND ('${P_SOVENDA}' = 'N' OR UPPER(CAMPO) LIKE '%VENDA%')`
+
+#### MultiList com valores estaticos
+```xml
+<parameter id="P_SERIE" description="Canal" metadata="multiList:Text"
+           listType="text" required="true" keep-last="true" order="3">
+    <item value="3" label="3 - MeLi"/>
+    <item value="7" label="7 - Amazon Full"/>
+    <item value="8" label="8 - Magalu Full"/>
+</parameter>
+```
+- Mesmo padrao do singleList mas com `multiList:Text`
+- No SQL: `AND SERIEDOC IN (:P_SERIE)`
+
+#### Entity (entidade do Sankhya - busca com autocomplete)
+```xml
+<parameter id="MARCA" description="Marca" metadata="entity:MarcaProduto@CODIGO"
+           required="false" keep-last="true" keep-date="false"
+           show-inactives="false" label="MARCA : Entidade/Tabela" order="5"/>
+<parameter id="CODPARC" description="Fornecedor"
+           metadata="entity:ParceiroFornecedorCotacao@CODPARC"
+           required="false" keep-last="true" order="6"/>
+```
+- Formato: `entity:NomeDaEntidade@CAMPO_CHAVE`
+- Pode ser `required="false"` — quando nao preenchido, valor e NULL
+- No SQL usar padrao OR IS NULL: `WHERE (CAMPO = :PARAM OR :PARAM IS NULL)`
+- O EL `${MARCA}` retorna o valor da chave selecionada ou string vazia
+
+#### Ordem dos parametros
+- Usar atributo `order="N"` para controlar a ordem visual no prompt
+- Sem `order`, o Sankhya pode exibir em ordem diferente da declarada
 
 ---
 
-### Regra 3 — `multiList` usa `:Text`, NÃO `:Integer`
+## 3. JSP - Cabecalho Padrao
 
-**Contexto:** Parâmetros do tipo `multiList` (seleção múltipla a partir de uma query auxiliar).
-
-**Regra:** O atributo `bind` do `multiList` deve referenciar como `:Text`, mesmo quando os valores selecionados são numéricos.
-
-**Por quê:** O framework serializa a seleção como string CSV (`'1','2','3'`). Se você declarar como `:Integer`, o bind tenta tratar como inteiro único e quebra com IN-list.
-
-**Exemplo ruim:**
-```xml
-<prompt-parameter name="P_TOPS" type="multiList" bind=":Integer">
-    <query>SELECT CODTOP, DESCROPER FROM TGFTOP</query>
-</prompt-parameter>
+```jsp
+<%@ page language="java" contentType="text/html; charset=ISO-8859-1"
+         pageEncoding="UTF-8" isELIgnored ="false"%>
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+    "http://www.w3.org/TR/html4/loose.dtd">
+<%@ page import="java.util.*" %>
+<%@ taglib uri="http://java.sun.com/jstl/core_rt" prefix="c" %>
+<%@ taglib prefix="snk" uri="/WEB-INF/tld/sankhyaUtil.tld" %>
+<html>
+<head>
+    <title>Meu Dashboard</title>
+    <snk:load/>
+</head>
+<body>
+    <!-- conteudo -->
+</body>
+</html>
 ```
 
-**Exemplo bom:**
-```xml
-<prompt-parameter name="P_TOPS" type="multiList" bind=":Text" label="TOPs">
-    <query>SELECT CODTOP, DESCROPER FROM TGFTOP ORDER BY DESCROPER</query>
-</prompt-parameter>
-```
-
-E no `snk:query`:
-```sql
-WHERE T.CODTOP IN (${P_TOPS})
-```
+- `<snk:load/>` e **obrigatorio** no `<head>`
+- `isELIgnored="false"` e **obrigatorio** (note: o Sankhya aceita com espaco antes do `=`)
+- `fmt:formatDate` **NAO EXISTE** no Sankhya — usar SUBSTR/EL ou scriptlet
 
 ---
 
-### Regra 4 — Parâmetros `date` NÃO podem ter default SQL
+## 4. snk:query - Regras de Binding
 
-**Contexto:** Default value de um `<prompt-parameter type="date">`.
+### Binding vs EL - Quando Usar Cada Um
 
-**Regra:** Não defina default via expressão SQL para parâmetros de data. O usuário **deve** escolher no runtime — deixe sem default ou use uma string literal (não recomendado).
+| Tipo do Parametro | Usar | Exemplo |
+|-------------------|------|---------|
+| Data (date) | **EL** `'${P_DT}'` com TO_DATE/SUBSTR | `TO_DATE(SUBSTR('${P_DT}', 1, 10), 'YYYY-MM-DD')` |
+| MultiList (Text) | **Binding** `:P_CODEMP` | `AND CODEMP IN (:P_CODEMP)` |
+| SingleList (Text) | **EL** `'${P_PARAM}'` | `AND ('${P_SOVENDA}' = 'N' OR ...)` |
+| Entity | **Binding** `:PARAM` com OR IS NULL | `AND (CAMPO = :PARAM OR :PARAM IS NULL)` |
+| Texto simples | **EL** `'${P_TEXTO}'` | `AND CAMPO = '${P_TEXTO}'` |
+| Numerico | **EL** `${P_NUM}` (sem aspas) | `AND CODPROD = ${P_NUM}` |
 
-**Por quê:** O parser do prompt avalia a expressão como string e gera erro de parsing, ou pior, congela o gadget no carregamento. Outros tipos (integer, text) aceitam default SQL — date não.
+### Padrao CTE PARAMS para datas
 
-**Exemplo ruim:**
-```xml
-<prompt-parameter name="P_DATA" type="date" label="Data">
-    <default>SELECT SYSDATE FROM DUAL</default>
-</prompt-parameter>
-```
-
-**Exemplo bom:**
-```xml
-<prompt-parameter name="P_DATA" type="date" label="Data" required="true" />
-```
-
----
-
-### Regra 5 — Dentro de CDATA, operadores ficam LITERAIS (não HTML-encoded)
-
-**Contexto:** Bloco SQL dentro de `<![CDATA[ ... ]]>` no `snk:query`.
-
-**Regra:** O CDATA já desabilita o parsing XML. Use operadores literais (`<`, `>`, `&`, `<=`, `>=`). Se vier código com `&lt;`, `&gt;`, `&amp;` dentro de CDATA, é bug — corrigir antes de testar.
-
-**Por quê:** O Oracle vai receber a string literal `&lt;` no SQL e disparar `ORA-00920: invalid relational operator`. É o erro mais comum em gadgets gerados via copy-paste de editor HTML/Markdown.
-
-**Exemplo ruim (gera ORA-00920):**
-```xml
-<snk:query>
-    <![CDATA[
-        SELECT * FROM TGFCAB WHERE VLRNOTA &gt;= 1000 AND DTNEG &lt;= SYSDATE
-    ]]>
+```jsp
+<snk:query var="dados">
+WITH PARAMS AS (
+    SELECT TO_DATE(SUBSTR('${P_DTINI}', 1, 10), 'YYYY-MM-DD') AS DT_INI,
+           TO_DATE(SUBSTR('${P_DTFIM}', 1, 10), 'YYYY-MM-DD') AS DT_FIM
+    FROM DUAL
+)
+SELECT V.CODPROD, V.DESCRPROD
+FROM MINHA_TABELA V, PARAMS P
+WHERE V.DTNEG BETWEEN P.DT_INI AND P.DT_FIM + 0.99999
+  AND V.CODEMP IN (:P_CODEMP)
+  AND V.SERIEDOC IN (:P_SERIE)
 </snk:query>
 ```
 
-**Exemplo bom:**
-```xml
-<snk:query>
-    <![CDATA[
-        SELECT * FROM TGFCAB WHERE VLRNOTA >= 1000 AND DTNEG <= SYSDATE
-    ]]>
+### snk:query NAO pode ficar dentro de c:if/c:choose
+
+O Sankhya compila todas as `snk:query` no carregamento, independente de condicionais JSTL.
+Colocar `snk:query` dentro de `<c:when>` ou `<c:if>` causa **Internal Server Error**.
+Se precisar de query condicional, usar scriptlet `out.println(sql)` dentro do snk:query.
+
+### Scriptlet dentro de snk:query (padrao modelo Sankhya)
+
+Para queries condicionais ou que recebem parametros de args/refreshDetails:
+
+```jsp
+<snk:query var="dados">
+<%
+    String query;
+    if (request.getAttribute("MEU_PARAM") != null) {
+        query = "SELECT * FROM TABELA WHERE CAMPO = :MEU_PARAM";
+    } else {
+        query = "SELECT NULL AS CAMPO FROM DUAL WHERE 1 <> 1";
+    }
+    out.println(query);
+%>
 </snk:query>
 ```
 
-> 💡 **Dica de diagnóstico:** Quando der `ORA-00920` no gadget, a PRIMEIRA coisa a checar é se o SQL tem `&lt;` / `&gt;` / `&amp;` dentro de CDATA. Vale mais que 90% dos casos.
-
 ---
 
-### Regra 6 — `snk:query` precisa de `id` único por gadget
+## 5. API JavaScript Nativa do Sankhya
 
-**Contexto:** Múltiplas queries no mesmo gadget (ex: dashboard multi-tab).
+O Sankhya disponibiliza funcoes JS globais nos gadgets HTML5:
 
-**Regra:** Cada `<snk:query id="...">` deve ter `id` único dentro do gadget. IDs duplicados fazem a segunda query ser ignorada silenciosamente.
+### executeQuery (PRINCIPAL - mais usado)
 
-**Por quê:** O framework resolve queries por ID no DOM — duplicado vira shadowing.
+```javascript
+// Signature: executeQuery(query, params, onSuccess, onError)
+// Retorna JSON: [{"COLUNA1":"VALOR","COLUNA2":"VALOR"}, ...]
 
----
+var query = "SELECT CODPROD, DESCRPROD FROM TGFPRO WHERE CODPROD IN (?)";
+var params = [{value: "${P_CODEMP}", type: "IN"}];
 
-## 💬 Exemplos de uso
-
-**Básico:**
-- "Como crio um gadget HTML5 que mostre vendas do mês?"
-- "Como faço prompt de data num gadget?"
-- "Qual a estrutura mínima de um XML gadget?"
-
-**Intermediário:**
-- "Como ligar 4 tabs num mesmo dashboard?"
-- "Como faço um multiList que filtra por TOP?"
-- "Como fazer drill-down de um gráfico pra uma lista?"
-
-**Avançado:**
-- "Estou dando ORA-00920 num gadget que era pra funcionar, por quê?"
-- "Como linko `TGFIXN/DOCSREF` entre dois gadgets de auditoria?"
-- "Como faço o gadget receber parâmetro de data e usar no BETWEEN sem dar bug?"
-- "Como detectar duplicidade de pedidos em um gadget de marketplace?"
-
----
-
-## 🧪 Como testar esta skill
-
-Antes de fazer commit de uma mudança:
-
-1. Carregue a skill em uma conversa nova no Claude.ai
-2. Rode as 3 perguntas representativas:
-   - "Como faço prompt de data num gadget HTML5?" → deve mencionar `EL + TO_DATE + SUBSTR`
-   - "Estou recebendo ORA-00920 no meu snk:query, o que pode ser?" → deve sugerir checar HTML-encoded operators em CDATA
-   - "Como uso multiList num prompt-parameter?" → deve mencionar `bind=":Text"` mesmo para valores numéricos
-3. Confira se:
-   - [ ] Claude carrega `gotchas.md` quando aparece erro `ORA-00920`
-   - [ ] Claude carrega `snk_query.md` quando a pergunta envolve bind/parâmetro em SQL
-   - [ ] Nenhuma resposta confunde com `sankhya-construtor-telas` (metadata.xml é OUTRA coisa)
-
----
-
-## 📦 Empacotamento
-
-```bash
-cd sankhya-html5/
-zip -r ../sankhya-html5.zip . -x "*.DS_Store" "*.swp"
+executeQuery(query, params, function(json) {
+    var rows = JSON.parse(json);
+    rows.forEach(function(r) {
+        console.log(r.CODPROD, r.DESCRPROD);
+    });
+}, function(erro) {
+    alert("Erro: " + erro);
+});
 ```
 
-Upload em **Claude.ai → Settings → Capabilities → Skills → Upload skill**.
+#### Tipos de parametros no executeQuery
 
-Para importar o gadget gerado no Sankhya:
-**Configurações → Gadgets → Importar** (ou via MGE Web na tela equivalente).
+| Tipo | Uso | Exemplo |
+|------|-----|---------|
+| `"D"` | Data | `{value: "${P_DTINI}", type: "D"}` |
+| `"I"` | Integer | `{value: "123", type: "I"}` |
+| `"S"` | String | `{value: "texto", type: "S"}` |
+| `"IN"` | Lista IN (multiList) | `{value: "${P_CODEMP}", type: "IN"}` com `WHERE COL IN (?)` |
+
+#### Datas no executeQuery
+
+O `type:"D"` pode nao aceitar formato `"YYYY-MM-DD"` diretamente.
+**Solucao segura:** inline a data no SQL via concatenacao JS (valor vem do proprio dado, nao do usuario):
+
+```javascript
+var query = "SELECT * FROM TAB WHERE TRUNC(DTNEG) = TO_DATE('" + diaISO + "','YYYY-MM-DD')";
+executeQuery(query, [], onSuccess, onError);
+```
+
+#### Construcao condicional de query
+
+```javascript
+var q = "SELECT * FROM TGFPRO pro JOIN TGFMAR mar ON mar.CODIGO = pro.CODMARCA WHERE 1=1";
+var params = [];
+
+// Empresa (multiList)
+q += " AND pro.CODEMP IN (?)";
+params.push({value: "${P_CODEMP}", type: "IN"});
+
+// Marca (entity, opcional)
+var vMarca = "${MARCA}";
+if (vMarca && vMarca != "0" && vMarca != "") {
+    q += " AND mar.CODIGO = " + vMarca;
+}
+
+executeQuery(q, params, onSuccess, onError);
+```
+
+### openLevel
+
+```javascript
+// Abrir outro nivel do dashboard
+openLevel('lvl_drill', {P_CODPROD: 12345});
+```
+
+**ATENCAO:** openLevel com `<args>` causa **Internal Server Error** em html5components.
+O parametro nao chega ao JSP do Level 2 por nenhum mecanismo (`EL`, `request.getAttribute`, `request.getParameter`).
+**Alternativa recomendada:** usar modal + executeQuery no mesmo JSP (ver secao 8).
+
+### refreshDetails
+
+```javascript
+// Atualizar outro componente no MESMO nivel
+refreshDetails('html5_detalhe', {CODPARC: codParc});
+```
+
+- Funciona para passar parametros entre componentes do mesmo level
+- O JSP destino recebe via `request.getAttribute("CODPARC")`
+- No snk:query, usar scriptlet + `:CODPARC` (binding JDBC)
+
+### openApp / openPage
+
+```javascript
+openApp('br.com.sankhya.com.mov.NotaFiscal', {NUNOTA: 12345}); // Abre tela nativa
+openPage('https://meusite.com', {}); // Abre pagina externa
+```
 
 ---
 
-## 📝 Changelog
+## 6. Padrao JSON - JSTL para JavaScript
 
-| Versão | Data | Mudança |
+Para transferir dados do snk:query (server-side) para JavaScript (client-side):
+
+```jsp
+<script>
+var dados = [
+<c:forEach items="${resultado.rows}" var="r" varStatus="s">
+    {cod:"<c:out value='${r.CODPROD}'/>",
+     desc:"<c:out value='${r.DESCRPROD}'/>",
+     vlr:<c:out value="${r.VALOR}"/>
+    }<c:if test="${!s.last}">,</c:if>
+</c:forEach>
+];
+</script>
+```
+
+**Cuidados:**
+- Usar `TO_CHAR(valor, 'FM999999999990.00')` no Oracle para evitar notacao cientifica nos numeros
+- Campos texto com aspas/quebra de linha podem quebrar o JSON — usar `<c:out>` que escapa HTML
+- NAO acumular valores com `<c:set>` em JSTL (problemas de precisao/notacao cientifica) — agregar em JS
+
+---
+
+## 7. Drill-Down via Modal + executeQuery (Padrao Recomendado)
+
+Como o openLevel nao funciona confiavelmente para html5components, o padrao
+recomendado e usar um modal overlay no mesmo JSP:
+
+### 1. Carregar dados resumidos via snk:query (server-side)
+### 2. Ao clicar, buscar detalhes via executeQuery (client-side)
+### 3. Exibir no modal
+
+```html
+<!-- Modal HTML -->
+<div id="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+     background:rgba(0,0,0,.75);z-index:999">
+    <div style="background:#1e293b;margin:30px auto;width:95%;max-height:85vh;
+         border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="padding:14px 20px;border-bottom:1px solid #334155;display:flex;
+             justify-content:space-between">
+            <h2 id="modalTitle">Itens</h2>
+            <button onclick="fecharModal()">&times;</button>
+        </div>
+        <div style="overflow-y:auto;padding:16px 20px">
+            <table><tbody id="modalBody"></tbody></table>
+        </div>
+    </div>
+</div>
+```
+
+```javascript
+function abrirDrill(diaISO) {
+    var q = "SELECT ... FROM TABELA WHERE TRUNC(DTNEG) = TO_DATE('" + diaISO + "','YYYY-MM-DD')"
+          + " AND CODEMP IN (?)";
+    executeQuery(q, [{value:"${P_CODEMP}", type:"IN"}], function(json) {
+        var rows = JSON.parse(json);
+        // montar tabela no modal
+        document.getElementById('modal').style.display = 'flex';
+    }, function(err) { alert(err); });
+}
+
+function fecharModal() {
+    document.getElementById('modal').style.display = 'none';
+}
+// Fechar ao clicar fora
+document.getElementById('modal').addEventListener('click', function(e) {
+    if (e.target === this) fecharModal();
+});
+```
+
+### Hibrido: pendentes do snk:query + processados do executeQuery
+
+Quando parte dos dados vem de snk:query (ex: XMLTABLE que so roda server-side)
+e parte pode ser buscada on-demand:
+
+1. snk:query carrega pendentes como array JS (`pendData[]`) no load da pagina
+2. Ao clicar num dia, filtra `pendData` por dia (JS) + busca processados via `executeQuery`
+3. Combina ambos no modal
+
+---
+
+## 8. XMLTABLE em snk:query
+
+Para parsear XML de notas (TGFIXN.XML) dentro do snk:query:
+
+```sql
+SELECT x.CPROD, x.XPROD, x.QCOM, x.VPROD
+FROM TGFIXN ixn,
+     XMLTABLE('/nfeProc/NFe/infNFe/det' PASSING XMLTYPE(ixn.XML)
+         COLUMNS
+             CPROD VARCHAR2(60)  PATH 'prod/cProd',
+             XPROD VARCHAR2(120) PATH 'prod/xProd',
+             QCOM  VARCHAR2(20)  PATH 'prod/qCom',
+             VPROD VARCHAR2(20)  PATH 'prod/vProd') x
+WHERE ixn.XML IS NOT NULL
+```
+
+**Gotchas XMLTABLE:**
+- XMLs gerados pelo Mercado Livre (`mercadolivre.invoice`) NAO tem namespace — nao usar XMLNAMESPACES
+- CPROD pode conter sufixos nao-numericos (ex: `102426_FBA`) — usar `REGEXP_REPLACE(x.CPROD,'[^0-9]','')` para limpar
+- Extrair valores como VARCHAR2 (nao NUMBER) para evitar `ORA-01722` em valores sujos
+- Conversao numerica fazer no JavaScript com `parseFloat` (tolerante a erros)
+
+### Padrao subquery para LEFT JOIN com TGFPRO
+
+XMLTABLE nao combina bem com INNER/LEFT JOIN na mesma clausula FROM.
+Solucao: encapsular o XMLTABLE numa subquery e fazer o JOIN no SELECT externo:
+
+```sql
+SELECT BASE.*, TGFPRO.MARCA, TGFMAR.DESCRICAO AS MARCA_DESC
+FROM (
+    SELECT REGEXP_REPLACE(x.CPROD,'[^0-9]','') AS CPROD, x.XPROD, x.QCOM, x.VPROD
+    FROM TGFIXN ixn,
+         XMLTABLE('/nfeProc/NFe/infNFe/det' PASSING XMLTYPE(ixn.XML) ...) x
+    WHERE ...
+) BASE
+LEFT JOIN TGFPRO ON BASE.CPROD = TO_CHAR(TGFPRO.CODPROD)
+LEFT JOIN TGFMAR ON TGFMAR.CODIGO = TGFPRO.CODMARCA
+WHERE (TGFMAR.CODIGO = :MARCA OR :MARCA IS NULL)
+  AND (TGFPRO.CODPARCFORN = :CODPARC OR :CODPARC IS NULL)
+```
+
+- Usar **LEFT JOIN** (nao INNER) para nao perder itens sem correspondencia em TGFPRO/TGFMAR
+- Usar INNER JOIN faz os totais nao baterem com os resumos
+
+---
+
+## 9. Export CSV Client-Side
+
+Para permitir download de dados do dashboard:
+
+```javascript
+function downloadCSV(filename, csvContent) {
+    var BOM = '\uFEFF'; // BOM UTF-8 para Excel abrir com acentos
+    var blob = new Blob([BOM + csvContent], {type: 'text/csv;charset=utf-8;'});
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function exportar() {
+    var csv = 'Cod;Descricao;Qtd;Valor\n';
+    dados.forEach(function(r) {
+        csv += r.cod + ';' + r.desc + ';' + r.qtd + ';' + r.vlr.toFixed(2) + '\n';
+    });
+    downloadCSV('relatorio.csv', csv);
+}
+```
+
+- Usar `;` como separador (padrao BR, Excel abre direto)
+- BOM UTF-8 (`\uFEFF`) garante acentos no Excel
+- Escapar campos com aspas se contiverem `;` ou `"`
+
+---
+
+## 10. Armadilhas e Workarounds
+
+### 10.1 Internal Server Error em Level 2 / openLevel
+
+**Causa:** O mecanismo `<args>` com `openLevel` causa Internal Server Error em html5components.
+Testado com `type="text"`, `type="integer"`, `type="date"` — nenhum funciona.
+
+**Solucao:** Usar modal + executeQuery no mesmo JSP (ver secao 7).
+Se precisar de dois componentes, usar `refreshDetails` no mesmo level.
+
+### 10.2 Datas em snk:query
+
+O binding JDBC `:P_DATA` NAO funciona para datas. Sempre usar EL + TO_DATE + SUBSTR.
+
+### 10.3 ORA-00920 em CDATA
+
+Dentro de `<![CDATA[]]>`, usar operadores literais (`<`, `>`, `<=`, `>=`).
+Fora de CDATA, usar entidades HTML (`&lt;`, `&gt;`).
+
+### 10.4 TO_NUMBER em dados de XML
+
+`TO_NUMBER()` em valores extraidos de XMLTABLE pode causar Internal Server Error
+se algum valor nao for numerico. Alternativas:
+- Extrair como VARCHAR2 e converter no JavaScript com parseFloat
+- Usar `DEFAULT 0 ON CONVERSION ERROR` (Oracle 12.2+)
+
+### 10.5 snk:query dentro de c:if / c:choose
+
+Causa Internal Server Error. Queries devem ficar fora de condicionais JSTL.
+
+### 10.6 Acumulacao EL com c:set
+
+`<c:set var="total" value="${total + r.VALOR}"/>` pode gerar notacao cientifica
+para numeros grandes. Fazer a agregacao em JavaScript apos transferir os dados como JSON.
+
+### 10.7 Cache apos upload
+
+O Sankhya pode manter cache do JSP anterior. Usar `Ctrl+Shift+R` no navegador.
+
+### 10.8 Acentos em comentarios SQL
+
+Nao usar acentos em comentarios `--` dentro do snk:query. Usar ASCII puro ou comentarios JSP.
+
+---
+
+## 11. Deploy no Sankhya
+
+1. Acesse **Administracao > Gadgets** no Sankhya
+2. Crie um novo gadget (ou edite existente)
+3. Clique em **"XML"** e cole o conteudo do XML
+4. Clique em **"Upload Pacote HTML"** e selecione o arquivo `.zip`
+5. Configure o **Ponto de Entrada** com o nome do JSP principal
+6. Salve e abra no Dashboard
+
+### Checklist pre-deploy
+
+- [ ] ZIP tem arquivos na raiz (sem pasta)
+- [ ] Ponto de Entrada bate com o nome do JSP
+- [ ] Nenhum acento em comentarios SQL
+- [ ] Datas usando EL + TO_DATE/SUBSTR (nao binding `:`)
+- [ ] MultiList usando binding `:` (nao EL)
+- [ ] Entity usando `:PARAM` com `OR :PARAM IS NULL`
+- [ ] SingleList usando EL `'${P_PARAM}'`
+- [ ] `<snk:load/>` presente no `<head>`
+- [ ] `isELIgnored="false"` no `<%@ page %>`
+- [ ] snk:query fora de qualquer c:if / c:choose
+- [ ] Numeros formatados com TO_CHAR(..., 'FM999999990.00') para evitar notacao cientifica
+
+---
+
+## 12. Tabelas Uteis para Dashboards
+
+### Notas Fiscais
+- `TGFIXN` — Importacao de XML de Notas (STATUS: 1=Cancelado, 2=Importado, 5=Confirmado)
+- `TGFCAB` — Cabecalho de notas/pedidos
+- `TGFITE` — Itens de notas/pedidos
+
+### Estoque
+- **TGFEST** — Estoque ATUAL (campo `ESTOQUE`, chaves `CODPROD+CODEMP+CODLOCAL+CONTROLE`)
+- **TGFCTE** — Historico de contagem (SEQUENCIA=1 = snapshot)
+
+### Produto
+- `TGFPRO` — Cadastro (CODPROD, DESCRPROD, CODMARCA, CODPARCFORN, REFERENCIA)
+- `TGFMAR` — Marcas (CODIGO, DESCRICAO)
+
+### Parceiro / Empresa
+- `TGFPAR` — Parceiros (CODPARC, NOMEPARC)
+- `TSIEMP` — Empresas (CODEMP, NOMEFANTASIA)
+
+---
+
+## Changelog
+
+| Versao | Data | Mudanca |
 |---|---|---|
-| 1.0.0 | 2026-05-19 | Versão inicial. Cobre gadgets JSP+XML, snk:query, prompt-parameters e seis regras críticas validadas em produção |
-
----
-
-## 🔗 Skills relacionadas
-
-- `sankhya-dicionario` — para descobrir qual tabela/campo usar no SQL do gadget
-- `sankhya-funcionamento` — para entender o fluxo de negócio que o gadget vai modelar
-- `sankhya-construtor-telas` — para telas custom de cadastro (metadata.xml), que é caminho diferente
-- `sankhya-api-java` — quando o gadget precisa chamar uma Ação Java customizada
-
----
-
-## 📄 Licença
-
-MIT — veja [LICENSE](../LICENSE) no root do repositório.
+| 1.0.0 | 2026-05-19 | Versao inicial |
+| 2.0.0 | 2026-05-22 | API JS nativa (executeQuery, openLevel, refreshDetails, openApp, openPage), parametros entity/singleList com item estatico, padrao modal+executeQuery para drill-down, XMLTABLE com subquery+LEFT JOIN, export CSV client-side, padrao JSON via JSTL, gotchas openLevel/args Internal Server Error, snk:query dentro de c:if, TO_NUMBER em XML, acumulacao EL |
